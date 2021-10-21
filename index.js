@@ -1,5 +1,6 @@
 "use strict";
 
+/* Imports */
 const fs = require("fs");
 const yargs = require("yargs");
 const R = require("ramda");
@@ -20,6 +21,7 @@ const unsafeReadFileJson = (x) => {
   }
 };
 
+/* Arguments */
 const argv = yargs
   .option("workspace", {
     alias: "w",
@@ -29,35 +31,40 @@ const argv = yargs
   .help()
   .alias("help", "h").argv;
 
-if (argv.workspace) {
-  const { workspaces } = unsafeReadFileJson(argv.workspace);
-  const relativePath = argv.workspace.replace("package.json", "");
-  const dependencies = R.pipe(
-    R.map(
-      R.pipe(
-        createRelativePackagePath(relativePath, "package.json"),
-        unsafeReadFileJson,
-        R.prop("dependencies")
-      )
-    ),
-    mergeObjects, // This makes it a dict and deduplicates it
-    Object.entries
-  )(workspaces);
-
-  const licenses = R.pipe(
-    R.map(
-      R.pipe(
-        ([key, value]) =>
-          createRelativePackagePath(relativePath + "node_modules/")(key),
-        unsafeReadFileJson,
-        R.props(["version", "license", "homepage"])
-      )
-    )
-  )(dependencies);
-
-  process.stdout.write("Dependency, Version Requested, Version, License, Link\n");
-  R.pipe(
-    (arr) => R.zip(...arr),
-    R.map(R.pipe(flatten, R.intersperse(","), R.join(""), writeLineToStdout))
-  )([dependencies, licenses]);
+/* Imports */
+if (!argv.workspace) {
+  process.stderr.write(
+    "Error: Please provide a path to a root workspace file."
+  );
+  process.exit(1);
 }
+const { workspaces } = unsafeReadFileJson(argv.workspace);
+const relativePath = argv.workspace.replace("package.json", "");
+const dependencies = R.pipe(
+  R.map(
+    R.pipe(
+      createRelativePackagePath(relativePath, "package.json"),
+      unsafeReadFileJson,
+      R.prop("dependencies")
+    )
+  ),
+  mergeObjects, // This makes it a dict and deduplicates it
+  Object.entries
+)(workspaces);
+
+const licenses = R.pipe(
+  R.map(
+    R.pipe(
+      ([key, value]) =>
+        createRelativePackagePath(relativePath + "node_modules/")(key),
+      unsafeReadFileJson,
+      R.props(["version", "license", "homepage"])
+    )
+  )
+)(dependencies);
+
+process.stdout.write("Dependency, Version Requested, Version, License, Link\n");
+R.pipe(
+  (arr) => R.zip(...arr),
+  R.map(R.pipe(flatten, R.intersperse(","), R.join(""), writeLineToStdout))
+)([dependencies, licenses]);
